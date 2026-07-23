@@ -9,7 +9,7 @@ built.
 - **No Kafka/Redis/Docker.** An earlier design pass considered these, but
   they directly conflict with the assignment's explicit "no distributed
   systems/microservices, no containerization" constraints, and don't fit
-  the time budget. Everything runs in a single Spring Boot process:
+  the current scale and scope of this build. Everything runs in a single Spring Boot process:
   `ThreadPoolTaskExecutor` for the bounded worker pool, an in-process
   round-robin dispatcher for per-tenant fairness, in-memory per-tenant
   token buckets for rate limiting, `@Scheduled` polling + DB columns for
@@ -18,7 +18,7 @@ built.
   implementation per channel (email/SMS/push/in-app), each randomly
   succeeding/failing based on a per-tenant-per-channel configurable rate.
   No real provider integration (Twilio, SES, etc.) — out of scope for the
-  assignment and the time budget.
+  assignment.
 
 ## Tech stack & reasoning
 
@@ -111,6 +111,24 @@ built.
   confirmed the full loop end-to-end through the real REST API - immediate
   success, retry/backoff timing (~10s then ~20s, matching the configured
   exponential backoff), and scheduled sends correctly waiting until due.
+
+## User provisioning API
+
+- Gap noticed while planning integration tests: there was no API to create
+  `AppUser` accounts, only the SQL seed script. Since the assignment scopes
+  "basic RBAC for the two roles" as in-scope and only excludes *advanced*
+  auth (OAuth/SSO/MFA), a plain username+password creation endpoint fits
+  within scope rather than being an unnecessary addition.
+- `POST /api/admin/users` (platform-admin only, covered automatically by
+  the existing `/api/admin/**` security rule). Cross-field validation
+  (`tenantId` required + must resolve to a real tenant for `TENANT_ADMIN`,
+  must be absent for `PLATFORM_ADMIN`) lives in `AppUserService` since it
+  can't be expressed as a single-field bean validation annotation.
+- Verified live: created a tenant admin through the real endpoint, then
+  logged in *as that user* and confirmed both successful access to their
+  own tenant and correct 403 on another tenant - the full
+  create-then-authenticate-then-authorize loop, not just the creation
+  response.
 
 ## Open items / not yet decided
 
