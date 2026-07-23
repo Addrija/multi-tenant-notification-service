@@ -85,6 +85,33 @@ built.
   (validation, not-found, channel/template mismatch, duplicate channel,
   cross-tenant access denial) - not just unit tests in isolation.
 
+## Dispatch engine
+
+- Built incrementally as small, individually unit-tested commits rather than
+  one large commit: rate limiter, retry policy, channel senders, fairness
+  scheduler, then the poller/dispatcher - each committed and pushed once its
+  own tests passed.
+- `NotificationPoller` (scheduled batch fetch + fairness interleave + submit
+  to a bounded `ThreadPoolTaskExecutor`) and `NotificationDispatcher` (claim
+  + send + outcome recording for one notification) were originally one
+  class; split after review into two single-purpose ones.
+- Claim step uses `saveAndFlush` (not `save`) specifically so the
+  `@Version` optimistic-lock check fires immediately and
+  `ObjectOptimisticLockingFailureException` can be caught inline, letting a
+  losing concurrent claim skip gracefully instead of failing the whole
+  transaction.
+- Known gap: notification submission doesn't validate that the tenant has
+  a `ChannelConfig` for the requested channel; the dispatcher handles a
+  missing/disabled channel defensively (fails the notification permanently
+  with a clear reason) but this should ideally be validated earlier, at
+  submission time. Left as a documented gap rather than fixed, given the
+  current scale and scope of this build.
+- Checkpoint verified live (not just unit tests): booted the app, forced
+  deterministic outcomes via direct SQL failure-rate overrides, and
+  confirmed the full loop end-to-end through the real REST API - immediate
+  success, retry/backoff timing (~10s then ~20s, matching the configured
+  exponential backoff), and scheduled sends correctly waiting until due.
+
 ## Open items / not yet decided
 
 (updated as the build progresses)
