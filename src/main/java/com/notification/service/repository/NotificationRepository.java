@@ -1,6 +1,7 @@
 package com.notification.service.repository;
 
 import com.notification.service.entity.Notification;
+import com.notification.service.entity.enums.ChannelType;
 import com.notification.service.entity.enums.NotificationStatus;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -16,9 +17,19 @@ public interface NotificationRepository extends JpaRepository<Notification, UUID
 
     Optional<Notification> findByIdAndTenantId(UUID id, Long tenantId);
 
-    List<Notification> findByTenantId(Long tenantId, Pageable pageable);
-
-    List<Notification> findByTenantIdAndStatus(Long tenantId, NotificationStatus status, Pageable pageable);
+    // Delivery report: status/channelType are optional filters (null = no filter on that field).
+    @Query("""
+        SELECT n FROM Notification n
+        WHERE n.tenant.id = :tenantId
+          AND (:status IS NULL OR n.status = :status)
+          AND (:channelType IS NULL OR n.channelType = :channelType)
+        ORDER BY n.createdAt DESC
+        """)
+    List<Notification> findByTenantIdWithFilters(
+            @Param("tenantId") Long tenantId,
+            @Param("status") NotificationStatus status,
+            @Param("channelType") ChannelType channelType,
+            Pageable pageable);
 
     // Batch of due work for the poller: newly PENDING sends whose scheduledAt has
     // arrived, plus RETRYING sends whose backoff window (nextRetryAt) has elapsed.
