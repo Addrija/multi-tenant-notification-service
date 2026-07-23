@@ -68,6 +68,23 @@ built.
   building requests from scratch. Seed passwords are documented in the
   script's header comment.
 
+## REST APIs
+
+- Platform admin (`/api/admin/tenants`) and tenant admin
+  (`/api/tenants/{tenantId}/...`) endpoints for tenants, templates, channel
+  configs, and notifications, backed by a `GlobalExceptionHandler` mapping
+  domain exceptions to consistent HTTP responses (404/403/400/500).
+- Discovered Boot 4.1.0 ships **Jackson 3.x**, not the Jackson 2.x package
+  layout usually assumed - `ObjectMapper` lives under `tools.jackson.databind`,
+  not `com.fasterxml.jackson.databind`. Verified via the actual jar contents
+  and Spring's autoconfiguration bytecode before writing code that depended
+  on it, rather than assuming API compatibility with Jackson 2.
+- Verified the full flow manually against a live instance with seed data:
+  tenant/template/channel CRUD, notification submission with template
+  variable substitution, delivery-report filtering, and every error path
+  (validation, not-found, channel/template mismatch, duplicate channel,
+  cross-tenant access denial) - not just unit tests in isolation.
+
 ## Open items / not yet decided
 
 (updated as the build progresses)
