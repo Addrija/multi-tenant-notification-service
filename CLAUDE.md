@@ -130,6 +130,31 @@ built.
   create-then-authenticate-then-authorize loop, not just the creation
   response.
 
+## Integration tests
+
+- `@SpringBootTest` + `@AutoConfigureMockMvc` against the real local MySQL
+  instance (no separate test database) - real Spring Security filter chain
+  (HTTP Basic exercised via `SecurityMockMvcRequestPostProcessors.httpBasic`,
+  not `@WithMockUser`, which would bypass actual authentication), real
+  `@Scheduled` poller. Each test creates and cleans up its own isolated
+  tenant/user fixtures (unique suffixes) rather than depending on the seed
+  script, so tests are repeatable and self-contained.
+- Confirmed `@AutoConfigureMockMvc` moved package in Boot 4.1.0 (to
+  `org.springframework.boot.webmvc.test.autoconfigure`) before writing
+  code, following the same verify-before-assuming approach used for the
+  earlier Jackson 3 discovery. `@SpringBootTest` and the core `MockMvc*`
+  helper classes stayed at their classic packages.
+- The flagship test (`NotificationLifecycleIntegrationTest`) submits a
+  notification through the real REST API and uses Awaitility to wait for
+  the actual background poller to dispatch it - forcing deterministic
+  outcomes via `simulatedFailureRate` overrides rather than random luck,
+  automating what was previously a manual checkpoint verification.
+- Found and fixed an `@AfterEach` cleanup bug via actually running the
+  tests: naive per-class teardown methods hit FK constraint violations
+  deleting a tenant while child rows created during the test still
+  referenced it. Fixed with one shared `cleanUpTenant()` helper deleting in
+  FK-safe order, used by all test classes.
+
 ## Open items / not yet decided
 
 (updated as the build progresses)
