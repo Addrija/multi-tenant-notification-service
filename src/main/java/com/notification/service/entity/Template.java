@@ -48,7 +48,7 @@ public class Template {
     private ChannelType channelType;
 
     @Lob
-    @Column(nullable = false)
+    @Column(nullable = false, columnDefinition = "LONGTEXT")
     private String contentTemplate;
 
     @Column(nullable = false, updatable = false)

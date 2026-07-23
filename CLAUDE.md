@@ -48,6 +48,26 @@ built.
   private planning/personal-background material from an earlier planning
   session — deliberately excluded from the repo, not a submission artifact.
 
+## RBAC
+
+- Spring Security, HTTP Basic, stateless sessions, BCrypt password hashing.
+  `AppUser` backs a custom `UserDetailsService`. Role checks
+  (`PLATFORM_ADMIN` vs `TENANT_ADMIN`) are enforced via URL-pattern rules;
+  tenant-ownership scoping (a `TENANT_ADMIN` must only touch their own
+  tenant) isn't expressible as a URL pattern, so it's enforced in the
+  service layer via a `TenantAccessGuard` component instead.
+- Found and fixed a schema bug while dumping the SQL for reference:
+  `Template.contentTemplate` (a `@Lob String`) had been mapped to MySQL
+  `tinytext` (255-byte cap) instead of `longtext`, because combining `@Lob`
+  with `@Column(nullable = false)` let `@Column`'s default `length = 255`
+  override the LOB sizing. Fixed with an explicit
+  `columnDefinition = "LONGTEXT"`.
+- Added `sql/01_schema.sql` (schema-only `mysqldump`) and
+  `sql/02_seed_data.sql` (demo tenants/users/channels/templates) so an
+  evaluator can inspect or recreate the schema and try the API without
+  building requests from scratch. Seed passwords are documented in the
+  script's header comment.
+
 ## Open items / not yet decided
 
 (updated as the build progresses)
