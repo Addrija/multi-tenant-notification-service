@@ -27,3 +27,4 @@ notification:
   retry:
     max-attempts: 5
     base-backoff-seconds: 10
+    max-backoff-seconds: 300
