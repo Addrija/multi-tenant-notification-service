@@ -38,4 +38,4 @@ application-local.properties
 .env
 
 ### Personal notes (not for public repo) ###
-HANDOFF_CONTEXT.md
+docs/
