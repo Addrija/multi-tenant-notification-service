@@ -52,9 +52,16 @@ containers, per the assignment's explicit constraints:
    mysql -uroot -p notification_service < sql/01_schema.sql
    mysql -uroot -p notification_service < sql/02_seed_data.sql
    ```
-4. **Run**:
+4. **Build**:
+   ```bash
+   ./mvnw clean package
+   ```
+   Produces `target/multi-tenant-notification-service-0.0.1-SNAPSHOT.jar`. Add `-DskipTests` if you just want the jar without running the test suite (see Testing below for running tests on their own).
+5. **Run** — either via Maven directly, or the built jar:
    ```bash
    SPRING_PROFILES_ACTIVE=local ./mvnw spring-boot:run
+   # or
+   SPRING_PROFILES_ACTIVE=local java -jar target/multi-tenant-notification-service-0.0.1-SNAPSHOT.jar
    ```
    App comes up on `http://localhost:8081` (8080 was occupied by an unrelated process during development, so the default was moved — override with `SERVER_PORT` if needed).
 
@@ -70,6 +77,18 @@ All endpoints use HTTP Basic auth, e.g.:
 ```bash
 curl -u acme_admin:TenantAdmin@123 http://localhost:8081/api/tenants/2/templates
 ```
+
+## Postman collection
+
+`postman/multi-tenant-notification-service.postman_collection.json` covers
+every endpoint, organized into folders in a natural demo order (platform
+admin → user provisioning → templates → channels → notifications →
+security/RBAC). Collection variables default to the seeded Acme Corp
+tenant/credentials, and IDs from creation requests (tenant, template,
+channel config, notification) auto-save into variables so most of the flow
+runs top-to-bottom without manual copy-pasting. Each request's description
+explains what to send and what response to expect. Import it into Postman,
+have the app running locally with seed data loaded, and go.
 
 ## API overview
 

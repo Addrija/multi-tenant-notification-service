@@ -1,0 +1,439 @@
+{
+  "info": {
+    "name": "Multi-Tenant Notification Service",
+    "description": "API collection for the multi-tenant notification service assignment. Import this into Postman, set the collection variables (see the 'baseUrl' etc. variables tab), then run requests folder by folder in order. Requests that create resources (Create Tenant, Create Template, Create Channel Config, Submit Notification) auto-save the returned id into a collection variable so later requests can reference it without manual copy-pasting.\n\nRun the app first: `SPRING_PROFILES_ACTIVE=local ./mvnw spring-boot:run`, and make sure `sql/02_seed_data.sql` has been applied so the demo users/tenants below exist.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8081" },
+    { "key": "platformAdminUser", "value": "platformadmin" },
+    { "key": "platformAdminPass", "value": "PlatformAdmin@123" },
+    { "key": "tenantAdminUser", "value": "acme_admin" },
+    { "key": "tenantAdminPass", "value": "TenantAdmin@123" },
+    { "key": "tenantId", "value": "2", "description": "Acme Corp's tenant id from the seed data. Overwritten automatically if you run 'Create Tenant' below." },
+    { "key": "templateId", "value": "1", "description": "Acme's seeded 'order_shipped' EMAIL template id. Overwritten if you run 'Create Template'." },
+    { "key": "channelConfigId", "value": "", "description": "Filled automatically after running 'Create Channel Config'." },
+    { "key": "notificationId", "value": "", "description": "Filled automatically after running 'Submit Notification (Immediate)'." }
+  ],
+  "item": [
+    {
+      "name": "1. Platform Admin - Tenants",
+      "description": "All requests here authenticate as the platform admin (platformadmin / PlatformAdmin@123, seeded). Platform admin manages tenants globally, not scoped to any single tenant.",
+      "auth": {
+        "type": "basic",
+        "basic": [
+          { "key": "username", "value": "{{platformAdminUser}}" },
+          { "key": "password", "value": "{{platformAdminPass}}" }
+        ]
+      },
+      "item": [
+        {
+          "name": "Create Tenant",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Initech Demo\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/admin/tenants", "host": ["{{baseUrl}}"], "path": ["api", "admin", "tenants"] },
+            "description": "How to test: send as-is. Expect 201 with the new tenant's id/name/createdAt. The response id is auto-saved into the {{tenantId}} variable via the test script below, so later requests in this collection will target the tenant you just created instead of the seeded Acme Corp (id 2). Re-run 'Create Tenant' any time to reset which tenant subsequent requests act on."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const body = pm.response.json();",
+                  "    pm.collectionVariables.set('tenantId', body.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Tenants",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/admin/tenants", "host": ["{{baseUrl}}"], "path": ["api", "admin", "tenants"] },
+            "description": "How to test: send as-is. Expect 200 with a JSON array of every tenant (seeded + any you created)."
+          }
+        },
+        {
+          "name": "Get Tenant by ID",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/admin/tenants/{{tenantId}}", "host": ["{{baseUrl}}"], "path": ["api", "admin", "tenants", "{{tenantId}}"] },
+            "description": "How to test: send as-is, uses whatever tenant id is currently in {{tenantId}}. Expect 200. Try changing {{tenantId}} to something like 99999 to see the 404 error shape instead."
+          }
+        },
+        {
+          "name": "Update Tenant Rate Limit",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"capacity\": 50,\n  \"refillRatePerSec\": 5.0\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/admin/tenants/{{tenantId}}/rate-limits", "host": ["{{baseUrl}}"], "path": ["api", "admin", "tenants", "{{tenantId}}", "rate-limits"] },
+            "description": "How to test: send as-is. Expect 200 with the tenant's rate limit config. This creates the config if none existed yet, or updates it if one did (upsert)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Platform Admin - User Provisioning",
+      "auth": {
+        "type": "basic",
+        "basic": [
+          { "key": "username", "value": "{{platformAdminUser}}" },
+          { "key": "password", "value": "{{platformAdminPass}}" }
+        ]
+      },
+      "item": [
+        {
+          "name": "Create Tenant Admin User",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"demo_tenant_admin\",\n  \"password\": \"DemoAdmin@123\",\n  \"role\": \"TENANT_ADMIN\",\n  \"tenantId\": {{tenantId}}\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/admin/users", "host": ["{{baseUrl}}"], "path": ["api", "admin", "users"] },
+            "description": "How to test: send as-is (creates an admin for whichever tenant is currently in {{tenantId}}). Expect 201. Note the password is never echoed back in the response. To prove the account actually works, copy the username/password into a new request's Basic Auth and call any tenant-scoped endpoint (e.g. List Templates) as that user."
+          }
+        },
+        {
+          "name": "Create Platform Admin User",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"demo_platform_admin\",\n  \"password\": \"DemoAdmin@123\",\n  \"role\": \"PLATFORM_ADMIN\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/admin/users", "host": ["{{baseUrl}}"], "path": ["api", "admin", "users"] },
+            "description": "How to test: send as-is. Expect 201, tenantId in the response should be null. Then try sending it again with a non-null tenantId added to the body - expect 400 ('PLATFORM_ADMIN users must not have a tenantId')."
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Tenant Admin - Templates",
+      "description": "All requests here authenticate as the tenant admin (acme_admin / TenantAdmin@123, seeded, scoped to Acme Corp / tenant id 2).",
+      "auth": {
+        "type": "basic",
+        "basic": [
+          { "key": "username", "value": "{{tenantAdminUser}}" },
+          { "key": "password", "value": "{{tenantAdminPass}}" }
+        ]
+      },
+      "item": [
+        {
+          "name": "Create Template",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"password_reset\",\n  \"channelType\": \"EMAIL\",\n  \"contentTemplate\": \"Hi {{name}}, click here to reset your password: {{resetLink}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/tenants/{{tenantId}}/templates", "host": ["{{baseUrl}}"], "path": ["api", "tenants", "{{tenantId}}", "templates"] },
+            "description": "How to test: send as-is. Expect 201. The new template's id is auto-saved into {{templateId}} (overwriting the seeded id 1) so the notification requests below use it automatically."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const body = pm.response.json();",
+                  "    pm.collectionVariables.set('templateId', body.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Templates",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/tenants/{{tenantId}}/templates", "host": ["{{baseUrl}}"], "path": ["api", "tenants", "{{tenantId}}", "templates"] },
+            "description": "How to test: send as-is. Expect 200 with all templates for this tenant."
+          }
+        },
+        {
+          "name": "Get Template by ID",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/tenants/{{tenantId}}/templates/{{templateId}}", "host": ["{{baseUrl}}"], "path": ["api", "tenants", "{{tenantId}}", "templates", "{{templateId}}"] },
+            "description": "How to test: send as-is. Expect 200."
+          }
+        },
+        {
+          "name": "Update Template",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"password_reset_v2\",\n  \"channelType\": \"EMAIL\",\n  \"contentTemplate\": \"Hello {{name}}, reset your password here: {{resetLink}} (link expires in 1 hour)\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/tenants/{{tenantId}}/templates/{{templateId}}", "host": ["{{baseUrl}}"], "path": ["api", "tenants", "{{tenantId}}", "templates", "{{templateId}}"] },
+            "description": "How to test: send as-is against the template you just created. Expect 200 with the updated name/content. Run 'Get Template by ID' again afterward to confirm the change persisted."
+          }
+        },
+        {
+          "name": "Delete Template",
+          "request": {
+            "method": "DELETE",
+            "url": { "raw": "{{baseUrl}}/api/tenants/{{tenantId}}/templates/{{templateId}}", "host": ["{{baseUrl}}"], "path": ["api", "tenants", "{{tenantId}}", "templates", "{{templateId}}"] },
+            "description": "How to test: only run this if you don't need {{templateId}} for the Notifications folder below (deleting the seeded template id 1 will break those requests unless you re-run 'Create Template' first, or manually set {{templateId}} back to 1). Expect 204. Then run 'Get Template by ID' again and expect 404, proving the delete actually took effect."
+          }
+        },
+        {
+          "name": "Validation Error - Blank Template Name (400)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"\",\n  \"channelType\": \"EMAIL\",\n  \"contentTemplate\": \"body\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/tenants/{{tenantId}}/templates", "host": ["{{baseUrl}}"], "path": ["api", "tenants", "{{tenantId}}", "templates"] },
+            "description": "How to test: send as-is. Expect 400 with a body like {\"error\":\"Validation failed\",\"fields\":{\"name\":\"must not be blank\"}} - demonstrates field-level validation error responses."
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Tenant Admin - Channel Configs",
+      "auth": {
+        "type": "basic",
+        "basic": [
+          { "key": "username", "value": "{{tenantAdminUser}}" },
+          { "key": "password", "value": "{{tenantAdminPass}}" }
+        ]
+      },
+      "item": [
+        {
+          "name": "List Channel Configs (seeded)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/tenants/{{tenantId}}/channels", "host": ["{{baseUrl}}"], "path": ["api", "tenants", "{{tenantId}}", "channels"] },
+            "description": "How to test: send as-is first, before creating anything - Acme already has EMAIL/SMS/PUSH/IN_APP configured from the seed script. Good to run this before and after the create/update requests below to see the difference."
+          }
+        },
+        {
+          "name": "Create Channel Config (will 400 - already exists)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"channelType\": \"EMAIL\",\n  \"enabled\": true,\n  \"senderIdentity\": \"noreply@acme-corp.example\",\n  \"simulatedFailureRate\": 0.1\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/tenants/{{tenantId}}/channels", "host": ["{{baseUrl}}"], "path": ["api", "tenants", "{{tenantId}}", "channels"] },
+            "description": "How to test: run this against tenant 2 (Acme, seeded) as-is FIRST to see the 400 duplicate-channel error ('already configured... use PUT to update it'). Then change \"channelType\" to a tenant that doesn't have it configured yet - e.g. switch {{tenantId}} to 3 (Globex, whose SMS channel is seeded disabled but exists) or better, create a brand new tenant first (folder 1) and run this against that empty tenant to see the success (201) path with the id auto-saved to {{channelConfigId}}."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const body = pm.response.json();",
+                  "    pm.collectionVariables.set('channelConfigId', body.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Channel Config (disable)",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"enabled\": false\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/tenants/{{tenantId}}/channels/{{channelConfigId}}", "host": ["{{baseUrl}}"], "path": ["api", "tenants", "{{tenantId}}", "channels", "{{channelConfigId}}"] },
+            "description": "How to test: needs {{channelConfigId}} set - either from the 'Create Channel Config' response above, or manually grab an id from 'List Channel Configs' first (e.g. Acme's SMS channel). Expect 200 with enabled:false and every other field unchanged - this endpoint only applies fields you actually send (partial update), demonstrated by senderIdentity/simulatedFailureRate staying as they were."
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Tenant Admin - Notifications (core flow)",
+      "description": "This is the main flow to demo. Make sure the app is running with the scheduler active (SPRING_PROFILES_ACTIVE=local) so submitted notifications actually get picked up and dispatched within a few seconds.",
+      "auth": {
+        "type": "basic",
+        "basic": [
+          { "key": "username", "value": "{{tenantAdminUser}}" },
+          { "key": "password", "value": "{{tenantAdminPass}}" }
+        ]
+      },
+      "item": [
+        {
+          "name": "Submit Notification (Immediate)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"channelType\": \"EMAIL\",\n  \"templateId\": {{templateId}},\n  \"recipient\": \"jane@example.com\",\n  \"variables\": {\n    \"name\": \"Jane\",\n    \"resetLink\": \"https://example.com/reset/abc123\"\n  }\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/tenants/{{tenantId}}/notifications", "host": ["{{baseUrl}}"], "path": ["api", "tenants", "{{tenantId}}", "notifications"] },
+            "description": "How to test: send as-is. Expect 201, status PENDING, and renderedContent showing the template placeholders already substituted with the variables you passed. The id is auto-saved to {{notificationId}}. Wait 3-5 seconds (the poller runs every 3s), then run 'Get Notification by ID' below - status should now be SENT (Acme's EMAIL channel has a low seeded failure rate, so it will very likely succeed; if it happens to land on FAILED/RETRYING once, that's the simulated failure path working as intended - just re-run this request)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const body = pm.response.json();",
+                  "    pm.collectionVariables.set('notificationId', body.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Submit Notification (Scheduled, +2 min)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"channelType\": \"EMAIL\",\n  \"templateId\": {{templateId}},\n  \"recipient\": \"future@example.com\",\n  \"variables\": {\n    \"name\": \"Bob\",\n    \"resetLink\": \"https://example.com/reset/xyz789\"\n  },\n  \"scheduledAt\": \"2026-01-01T00:00:00Z\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/tenants/{{tenantId}}/notifications", "host": ["{{baseUrl}}"], "path": ["api", "tenants", "{{tenantId}}", "notifications"] },
+            "description": "How to test: BEFORE sending, edit the \"scheduledAt\" value to a timestamp 1-2 minutes in the future in ISO-8601 UTC format (e.g. take the current time and add 2 minutes - the placeholder date above is just a stand-in). Send it, expect 201 with status PENDING. Immediately run 'Get Notification by ID' with this notification's id and confirm it's still PENDING even though the poller is running. Wait until your scheduled time passes, then check again - status should flip to SENT, proving scheduled sends wait correctly rather than firing immediately."
+          }
+        },
+        {
+          "name": "List Notifications (Delivery Report)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/tenants/{{tenantId}}/notifications", "host": ["{{baseUrl}}"], "path": ["api", "tenants", "{{tenantId}}", "notifications"] },
+            "description": "How to test: send as-is. Expect 200 with every notification for this tenant, newest first."
+          }
+        },
+        {
+          "name": "List Notifications - Filter by Status=SENT",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/tenants/{{tenantId}}/notifications?status=SENT",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "tenants", "{{tenantId}}", "notifications"],
+              "query": [{ "key": "status", "value": "SENT" }]
+            },
+            "description": "How to test: send as-is. Only SENT notifications come back. Try changing the status query param to PENDING, RETRYING, or FAILED to see the filter working, or add &channelType=EMAIL alongside it to filter by both at once."
+          }
+        },
+        {
+          "name": "Get Notification by ID",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/tenants/{{tenantId}}/notifications/{{notificationId}}", "host": ["{{baseUrl}}"], "path": ["api", "tenants", "{{tenantId}}", "notifications", "{{notificationId}}"] },
+            "description": "How to test: send repeatedly right after 'Submit Notification (Immediate)' to watch status change live: PENDING -> IN_PROGRESS -> SENT (or RETRYING if it happened to fail simulated delivery). Also watch attemptCount and nextRetryAt change if it retries."
+          }
+        },
+        {
+          "name": "Get Notification History (Audit Trail)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/tenants/{{tenantId}}/notifications/{{notificationId}}/history", "host": ["{{baseUrl}}"], "path": ["api", "tenants", "{{tenantId}}", "notifications", "{{notificationId}}", "history"] },
+            "description": "How to test: run this after the notification above has reached SENT (or RETRYING). Expect 200 with two arrays: statusHistory (e.g. null->PENDING, PENDING->IN_PROGRESS, IN_PROGRESS->SENT, each with a timestamp and reason) and deliveryAttempts (one row per real send attempt, with outcome SUCCESS/FAILURE). This is the full audit trail for the notification."
+          }
+        },
+        {
+          "name": "Validation Error - Missing Template Variable (400)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"channelType\": \"EMAIL\",\n  \"templateId\": {{templateId}},\n  \"recipient\": \"jane@example.com\",\n  \"variables\": {\n    \"name\": \"Jane\"\n  }\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/tenants/{{tenantId}}/notifications", "host": ["{{baseUrl}}"], "path": ["api", "tenants", "{{tenantId}}", "notifications"] },
+            "description": "How to test: send as-is (deliberately omits the 'resetLink' variable the template needs). Expect 400 with 'Missing value for template variable: resetLink' - shows template rendering fails fast instead of silently leaving the placeholder in the output."
+          }
+        },
+        {
+          "name": "Validation Error - Channel/Template Mismatch (400)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"channelType\": \"SMS\",\n  \"templateId\": {{templateId}},\n  \"recipient\": \"jane@example.com\",\n  \"variables\": {\n    \"name\": \"Jane\",\n    \"resetLink\": \"https://example.com/reset/abc123\"\n  }\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/tenants/{{tenantId}}/notifications", "host": ["{{baseUrl}}"], "path": ["api", "tenants", "{{tenantId}}", "notifications"] },
+            "description": "How to test: send as-is - {{templateId}} is an EMAIL template but this request asks for SMS. Expect 400 ('Template channel (EMAIL) does not match requested channel (SMS)')."
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Security & RBAC Demo",
+      "description": "No collection-level auth set here on purpose - each request sets its own, so you can see exactly what's being sent.",
+      "item": [
+        {
+          "name": "No Credentials (401)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/tenants/{{tenantId}}/templates", "host": ["{{baseUrl}}"], "path": ["api", "tenants", "{{tenantId}}", "templates"] },
+            "description": "How to test: send as-is, no Authorization header at all. Expect 401."
+          }
+        },
+        {
+          "name": "Wrong Password (401)",
+          "request": {
+            "method": "GET",
+            "auth": { "type": "basic", "basic": [ { "key": "username", "value": "{{tenantAdminUser}}" }, { "key": "password", "value": "WrongPassword123" } ] },
+            "url": { "raw": "{{baseUrl}}/api/tenants/{{tenantId}}/templates", "host": ["{{baseUrl}}"], "path": ["api", "tenants", "{{tenantId}}", "templates"] },
+            "description": "How to test: send as-is. Expect 401 - proves the real password check runs, not just 'is a username present'."
+          }
+        },
+        {
+          "name": "Tenant Admin on Platform-Admin Endpoint (403)",
+          "request": {
+            "method": "GET",
+            "auth": { "type": "basic", "basic": [ { "key": "username", "value": "{{tenantAdminUser}}" }, { "key": "password", "value": "{{tenantAdminPass}}" } ] },
+            "url": { "raw": "{{baseUrl}}/api/admin/tenants", "host": ["{{baseUrl}}"], "path": ["api", "admin", "tenants"] },
+            "description": "How to test: send as-is. A TENANT_ADMIN token hitting a PLATFORM_ADMIN-only route. Expect 403."
+          }
+        },
+        {
+          "name": "Cross-Tenant Access Denied (403)",
+          "request": {
+            "method": "GET",
+            "auth": { "type": "basic", "basic": [ { "key": "username", "value": "{{tenantAdminUser}}" }, { "key": "password", "value": "{{tenantAdminPass}}" } ] },
+            "url": { "raw": "{{baseUrl}}/api/tenants/3/templates", "host": ["{{baseUrl}}"], "path": ["api", "tenants", "3", "templates"] },
+            "description": "How to test: send as-is. acme_admin (tenant 2) trying to read Globex's (tenant 3) templates. Expect 403 - this is the tenant-isolation rule, checked in the service layer since it can't be expressed as a URL pattern."
+          }
+        },
+        {
+          "name": "Correct Access - Own Tenant (200)",
+          "request": {
+            "method": "GET",
+            "auth": { "type": "basic", "basic": [ { "key": "username", "value": "{{tenantAdminUser}}" }, { "key": "password", "value": "{{tenantAdminPass}}" } ] },
+            "url": { "raw": "{{baseUrl}}/api/tenants/{{tenantId}}/templates", "host": ["{{baseUrl}}"], "path": ["api", "tenants", "{{tenantId}}", "templates"] },
+            "description": "How to test: send as-is right after the previous 403 request, same user, own tenant this time. Expect 200 - good side-by-side contrast for the video."
+          }
+        }
+      ]
+    }
+  ]
+}
