@@ -1,5 +1,6 @@
 package com.notification.service.exception;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
@@ -35,6 +36,15 @@ public class GlobalExceptionHandler {
                 fieldError -> fields.put(fieldError.getField(), fieldError.getDefaultMessage()));
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(new ErrorResponse("Validation failed", fields));
+    }
+
+    // Safety net for any DB constraint violation we haven't specifically handled
+    // upstream (e.g. deleting a row still referenced elsewhere) - never echoes
+    // ex.getMessage() here, since that contains the raw SQL/constraint text.
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ErrorResponse> handleDataIntegrityViolation(DataIntegrityViolationException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ErrorResponse.of("This action conflicts with existing related data and cannot be completed."));
     }
 
     @ExceptionHandler(Exception.class)

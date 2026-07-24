@@ -5,6 +5,7 @@ import com.notification.service.dto.response.TemplateResponse;
 import com.notification.service.entity.Template;
 import com.notification.service.entity.Tenant;
 import com.notification.service.exception.ResourceNotFoundException;
+import com.notification.service.repository.NotificationRepository;
 import com.notification.service.repository.TemplateRepository;
 import com.notification.service.repository.TenantRepository;
 import com.notification.service.security.AppUserPrincipal;
@@ -23,6 +24,7 @@ public class TemplateService {
     private final TemplateRepository templateRepository;
     private final TenantRepository tenantRepository;
     private final TenantAccessGuard tenantAccessGuard;
+    private final NotificationRepository notificationRepository;
 
     public TemplateResponse create(AppUserPrincipal principal, Long tenantId, TemplateRequest request) {
         tenantAccessGuard.assertTenantAccess(principal, tenantId);
@@ -61,7 +63,11 @@ public class TemplateService {
 
     public void delete(AppUserPrincipal principal, Long tenantId, Long templateId) {
         tenantAccessGuard.assertTenantAccess(principal, tenantId);
-        templateRepository.delete(findTemplateOrThrow(tenantId, templateId));
+        Template template = findTemplateOrThrow(tenantId, templateId);
+        // Historical notifications keep their own rendered snapshot, so detaching
+        // the FK here doesn't lose audit data - it just unblocks the delete.
+        notificationRepository.detachTemplate(templateId);
+        templateRepository.delete(template);
     }
 
     private Template findTemplateOrThrow(Long tenantId, Long templateId) {

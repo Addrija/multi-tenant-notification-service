@@ -5,6 +5,7 @@ import com.notification.service.entity.enums.ChannelType;
 import com.notification.service.entity.enums.NotificationStatus;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -42,4 +43,11 @@ public interface NotificationRepository extends JpaRepository<Notification, UUID
         ORDER BY n.scheduledAt ASC NULLS FIRST
         """)
     List<Notification> findDueForDispatch(@Param("now") Instant now, Pageable pageable);
+
+    // Historical notifications keep their own rendered snapshot (renderedContent,
+    // variables) independent of the template row, so detaching the FK on template
+    // deletion loses no audit information - it just stops blocking the delete.
+    @Modifying
+    @Query("UPDATE Notification n SET n.template = null WHERE n.template.id = :templateId")
+    void detachTemplate(@Param("templateId") Long templateId);
 }
